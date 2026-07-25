@@ -1,0 +1,10 @@
+{
+  "name": "ring-assessor",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "ring.mjs",
+  "scripts": {
+    "test": "node --test ring.test.mjs"
+  },
+  "license": "MIT"
+}
