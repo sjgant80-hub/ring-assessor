@@ -15,8 +15,9 @@
 1. Drop malformed findings; clamp severity to [0,1].
 2. Keep the significant ones (severity ≥ threshold). None ⇒ `healthy:true`.
 3. **root** = deepest significant finding (lowest layer), tie-broken by higher severity.
-4. **ranked** by `severity · (1 + (maxLayer − layer))` — depth is amplified so a deep root outranks a
-   louder surface symptom, while severity still separates findings at equal depth.
+4. **ranked** — DEEPEST-first (layer ascending), severity breaking ties at a layer. This is consistent
+   with `root` by construction: the root is always `ranked[0]`, so the tool never names two different
+   things to fix first.
 5. **path** = active findings ordered outermost→root. **distanceFromRoot** = layer − root.layer.
 
 ## Invariants

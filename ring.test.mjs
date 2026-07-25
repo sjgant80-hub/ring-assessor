@@ -75,9 +75,32 @@ test('severity is clamped and malformed findings are dropped, not crashed on', (
   assert.equal(r.root.severity, 1);
 });
 
-test('every non-healthy assessment carries plain advice', () => {
-  const r = assess([{ id: 'r', layer: 0, severity: 0.9 }]);
-  assert.match(r.advice, /root/);
+test('advice names the actual root id and its layer (not just the literal word "root")', () => {
+  const r = assess([{ id: 'db-latency', layer: 0, severity: 0.9 }, { id: 'ui', layer: 3, severity: 0.8 }]);
+  assert.ok(r.advice.includes('db-latency'), 'advice references the real root id');
+  assert.ok(r.advice.includes('layer 0'));
+});
+
+test('ranked[0] is ALWAYS the root — the tool never names two different things to fix first', () => {
+  // a much louder shallow symptom must NOT outrank the deep root in the fix-order
+  const r = assess([
+    { id: 'root', layer: 0, severity: 0.31 },
+    { id: 'loud-symptom', layer: 1, severity: 0.99 },
+  ]);
+  assert.equal(r.root.id, 'root');
+  assert.equal(r.ranked[0].id, 'root', 'fix-order agrees with the declared root');
+});
+
+test('a NaN threshold does NOT declare a severe system healthy (falls back to default)', () => {
+  const r = assess([{ id: 'x', layer: 0, severity: 0.95 }], { threshold: NaN });
+  assert.equal(r.healthy, false, 'a severe finding must not be silently ignored on a corrupt threshold');
+  assert.equal(r.root.id, 'x');
+});
+
+test('id-less findings at the same layer do not collide in the distance map', () => {
+  const r = assess([{ layer: 2, severity: 0.6 }, { layer: 2, severity: 0.7 }, { layer: 0, severity: 0.5 }]);
+  // three active findings ⇒ three distinct distance entries (no silent overwrite from a shared L2 id)
+  assert.equal(Object.keys(r.distanceFromRoot).length, 3);
 });
 
 test('deterministic — same findings, same assessment', () => {

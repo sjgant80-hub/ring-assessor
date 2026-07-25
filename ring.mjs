@@ -24,27 +24,30 @@ const DEFAULTS = { threshold: 0.3 }; // severities below this are "quiet", not s
 
 // findings: [{ id, layer:Number>=0, severity:0..1, note? }]
 export function assess(findings = [], opts = {}) {
-  const o = { ...DEFAULTS, ...opts };
+  // A non-finite threshold would make every `severity >= threshold` false and silently report a
+  // severe system as healthy — the opposite of what a triage tool must do. Fall back to the default.
+  const threshold = Number.isFinite(opts.threshold) ? opts.threshold : DEFAULTS.threshold;
+
+  // Assign a stable, UNIQUE id to every finding (append the index) so nothing collides in the
+  // distance/ranked maps — id-less findings at the same layer used to share the manufactured id `L<n>`.
   const clean = (Array.isArray(findings) ? findings : [])
     .filter(f => f && Number.isFinite(f.layer) && f.layer >= 0 && Number.isFinite(f.severity))
-    .map(f => ({ id: f.id != null ? f.id : `L${f.layer}`, layer: f.layer, severity: clamp01(f.severity), note: f.note || null }));
+    .map((f, i) => ({ id: f.id != null ? String(f.id) : `L${f.layer}#${i}`, layer: f.layer, severity: clamp01(f.severity), note: f.note || null }));
 
-  const active = clean.filter(f => f.severity >= o.threshold);
+  const active = clean.filter(f => f.severity >= threshold);
   if (active.length === 0) {
     return { healthy: true, root: null, ranked: [], path: [], distanceFromRoot: {}, considered: clean.length };
   }
 
-  const maxLayer = Math.max(...active.map(f => f.layer));
-
   // ROOT = the deepest significant finding (lowest layer); tie-break by higher severity.
   const root = active.reduce((a, b) => (b.layer < a.layer || (b.layer === a.layer && b.severity > a.severity)) ? b : a);
 
-  // Fix-order: deeper + more severe first. Weight amplifies depth so a deep root outranks a louder
-  // surface symptom, but severity still separates findings at the same depth.
-  const priority = f => f.severity * (1 + (maxLayer - f.layer));
+  // Fix-order: DEEPEST-first (fix the root before its downstream symptoms), severity breaks ties at a
+  // layer. This is now consistent with `root` by construction — the root is always ranked[0], so the
+  // tool never tells you two different things to fix first.
   const ranked = [...active]
-    .map(f => ({ ...f, priority: r4(priority(f)) }))
-    .sort((a, b) => b.priority - a.priority || a.layer - b.layer);
+    .sort((a, b) => a.layer - b.layer || b.severity - a.severity)
+    .map(f => ({ ...f, distanceFromRoot: f.layer - root.layer }));
 
   // Inward path: from the outermost active symptom down to the root.
   const path = [...active].sort((a, b) => b.layer - a.layer).map(f => ({ layer: f.layer, id: f.id }));
