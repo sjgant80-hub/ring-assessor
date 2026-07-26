@@ -129,3 +129,55 @@ test('deterministic — same findings, same assessment', () => {
   const f = [{ id: 'a', layer: 0, severity: 0.7 }, { id: 'b', layer: 2, severity: 0.5 }];
   assert.deepEqual(assess(f), assess(f));
 });
+
+// ── boundary/branch pins added to kill witness mutation survivors ──
+
+test('a severity exactly equal to the threshold is significant, not filtered out', () => {
+  // pins `severity >= threshold` at the boundary — `>` would silently call a severe-at-cutoff system healthy
+  const r = assess([{ id: 'edge', layer: 0, severity: 0.3 }], { threshold: 0.3 });
+  assert.equal(r.healthy, false, 'severity == threshold counts as active');
+  assert.equal(r.root.id, 'edge');
+});
+
+test('at equal depth AND equal severity, the first finding stays the root (stable tie-break)', () => {
+  // pins the reduce tie-break `b.severity > a.severity`: a non-strict `>=` would flip to the later finding
+  const r = assess([{ id: 'a', layer: 1, severity: 0.5 }, { id: 'b', layer: 1, severity: 0.5 }]);
+  assert.equal(r.root.id, 'a', 'equal layer + equal severity keeps the earlier finding as root');
+});
+
+test('at equal depth, the more severe finding is the root even when listed first', () => {
+  // pins `b.layer < a.layer`: a `<=` would pick the later finding at equal layer, ignoring severity
+  const r = assess([{ id: 'y', layer: 1, severity: 0.9 }, { id: 'x', layer: 1, severity: 0.5 }]);
+  assert.equal(r.root.id, 'y', 'higher severity wins the tie regardless of order');
+});
+
+test("a finding's note is preserved on the ranked entry, not nulled out", () => {
+  // pins `note || null`: an `&&` would replace every real note with null
+  const r = assess([{ id: 'x', layer: 0, severity: 0.9, note: 'db slow' }]);
+  assert.equal(r.ranked[0].note, 'db slow', 'the supplied note survives into the ranked output');
+});
+
+test('the inward path is ordered by LAYER (outermost first), not by severity', () => {
+  // pins the first `||` in the path comparator: `&&` would reorder by severity when layers differ
+  const r = assess([
+    { id: 'edge', layer: 5, severity: 0.5 },
+    { id: 'mid', layer: 2, severity: 0.9 },
+    { id: 'root', layer: 0, severity: 0.7 },
+  ]);
+  assert.deepEqual(r.path.map(p => p.id), ['edge', 'mid', 'root'], 'deepest-last by layer, ignoring severity magnitude');
+});
+
+test('within one layer the path breaks ties by severity (quietest first), not by id', () => {
+  // pins the second `||` in the path comparator: `&&` would collapse the severity tie-break into an id sort
+  const r = assess([
+    { id: 'a1', layer: 1, severity: 0.9 },
+    { id: 'z9', layer: 1, severity: 0.4 },
+  ]);
+  assert.deepEqual(r.path.map(p => p.id), ['z9', 'a1'], 'lower severity comes first at equal layer, id order (a1<z9) does not win');
+});
+
+test('advice reports the correct number of downstream symptoms (active - 1)', () => {
+  // pins `active.length - 1`: a `+ 1` would overstate the downstream count
+  const r = assess([{ id: 'root', layer: 0, severity: 0.9 }, { id: 'sym', layer: 2, severity: 0.8 }]);
+  assert.ok(r.advice.includes('the 1 downstream symptom'), 'two active findings ⇒ exactly one downstream symptom');
+});
