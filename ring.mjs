@@ -38,12 +38,16 @@ export function assess(findings = [], opts = {}) {
   for (let i = 0; i < src.length; i++) {
     // read every field defensively — a booby-trapped accessor on layer/severity/id must drop that one
     // finding, never crash the whole assessment.
-    let f, layer, severity, rawId, note;
-    try { f = src[i]; if (!f) continue; layer = f.layer; severity = f.severity; rawId = f.id; note = f.note; }
-    catch { continue; }
+    let f, layer, severity, id, note;
+    try {
+      f = src[i]; if (!f) continue;
+      layer = f.layer; severity = f.severity; note = f.note;
+      // String(rawId) is INSIDE the guard — a toxic id (throwing toString) drops this one finding.
+      id = f.id != null ? String(f.id) : `L${f.layer}`;
+    } catch { continue; }
     if (!Number.isFinite(layer) || layer < 0 || !Number.isFinite(severity)) continue;
-    let id = rawId != null ? String(rawId) : `L${layer}`;
-    if (used.has(id)) id = `${id}#${i}`;
+    // loop until unique — a crafted id already matching the `#i` suffix must not re-collide.
+    while (used.has(id)) id = `${id}#${i}`;
     used.add(id);
     clean.push({ id, layer, severity: clamp01(severity), note: note || null });
   }
@@ -64,7 +68,11 @@ export function assess(findings = [], opts = {}) {
     .map(f => ({ ...f, distanceFromRoot: f.layer - root.layer }));
 
   // Inward path: from the outermost active symptom down to the root.
-  const path = [...active].sort((a, b) => b.layer - a.layer).map(f => ({ layer: f.layer, id: f.id }));
+  // outermost → root; deeper is nearer the end, ties broken by higher severity then id so the path is
+  // fully deterministic and the root (deepest, most severe) always lands last.
+  const path = [...active]
+    .sort((a, b) => b.layer - a.layer || a.severity - b.severity || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map(f => ({ layer: f.layer, id: f.id }));
 
   const distanceFromRoot = Object.fromEntries(active.map(f => [f.id, f.layer - root.layer]));
 
