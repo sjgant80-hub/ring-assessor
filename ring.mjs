@@ -33,14 +33,20 @@ export function assess(findings = [], opts = {}) {
   // both id-less findings (which used to share `L<layer>`) AND duplicate EXPLICIT ids are disambiguated
   // by appending the index when an id would otherwise repeat.
   const used = new Set();
-  const clean = (Array.isArray(findings) ? findings : [])
-    .filter(f => f && Number.isFinite(f.layer) && f.layer >= 0 && Number.isFinite(f.severity))
-    .map((f, i) => {
-      let id = f.id != null ? String(f.id) : `L${f.layer}`;
-      if (used.has(id)) id = `${id}#${i}`;
-      used.add(id);
-      return { id, layer: f.layer, severity: clamp01(f.severity), note: f.note || null };
-    });
+  const clean = [];
+  const src = Array.isArray(findings) ? findings : [];
+  for (let i = 0; i < src.length; i++) {
+    // read every field defensively — a booby-trapped accessor on layer/severity/id must drop that one
+    // finding, never crash the whole assessment.
+    let f, layer, severity, rawId, note;
+    try { f = src[i]; if (!f) continue; layer = f.layer; severity = f.severity; rawId = f.id; note = f.note; }
+    catch { continue; }
+    if (!Number.isFinite(layer) || layer < 0 || !Number.isFinite(severity)) continue;
+    let id = rawId != null ? String(rawId) : `L${layer}`;
+    if (used.has(id)) id = `${id}#${i}`;
+    used.add(id);
+    clean.push({ id, layer, severity: clamp01(severity), note: note || null });
+  }
 
   const active = clean.filter(f => f.severity >= threshold);
   if (active.length === 0) {

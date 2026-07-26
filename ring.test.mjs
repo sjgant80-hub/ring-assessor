@@ -105,8 +105,18 @@ test('id-less findings at the same layer do not collide in the distance map', ()
 
 test('duplicate EXPLICIT ids are disambiguated — the root distance is not overwritten', () => {
   const r = assess([{ id: 'x', layer: 0, severity: 0.9 }, { id: 'x', layer: 4, severity: 0.8 }]);
-  assert.equal(Object.keys(r.distanceFromRoot).length, 2, 'both findings keep a distinct distance entry');
+  const ids = Object.keys(r.distanceFromRoot);
+  assert.equal(ids.length, 2, 'both findings keep a distinct distance entry');
+  assert.ok(ids.includes('x') && ids.some(k => k !== 'x'), 'the second "x" was renamed, not merged');
   assert.equal(r.distanceFromRoot[r.root.id], 0, 'the root distance is intact, not clobbered');
+});
+
+test('a finding with a throwing getter is dropped, not crashing the assessment', () => {
+  const good = { id: 'g', layer: 0, severity: 0.9 };
+  const poison = { get layer() { throw new Error('layer getter blew up'); }, severity: 0.9 };
+  const r = assess([good, poison, { id: 'h', layer: 2, severity: 0.8 }]);
+  assert.equal(r.considered, 2, 'the poison finding is dropped; the two good ones remain');
+  assert.equal(r.root.id, 'g');
 });
 
 test('an explicit null opts falls back to defaults instead of crashing', () => {
