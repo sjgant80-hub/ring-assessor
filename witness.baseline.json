@@ -1,0 +1,22 @@
+[
+  {
+    "mutation": ">= → >",
+    "snippet": "// A non-finite threshold would make every `severity >= threshold` false and silently repo",
+    "reason": "comment FP: the >= appears inside a // comment explaining the threshold guard, not in executable code"
+  },
+  {
+    "mutation": "> → >=",
+    "snippet": ".sort((a, b) => b.layer - a.layer || a.severity - b.severity || (a.id < b.id ? -1 : a.id >",
+    "reason": "equivalent: id tie-break `a.id > b.id`; differs from `>=` only when a.id===b.id, which is unreachable because every finding id is made unique via the `used` Set (lines 35,50-51)"
+  },
+  {
+    "mutation": "< → <=",
+    "snippet": "for (let i = 0; i < src.length; i++) {",
+    "reason": "equivalent: `i < src.length` → `i <= src.length` runs one extra OOB iteration where src[i] is undefined; `if (!f) continue;` makes it a no-op"
+  },
+  {
+    "mutation": "< → <=",
+    "snippet": ".sort((a, b) => b.layer - a.layer || a.severity - b.severity || (a.id < b.id ? -1 : a.id >",
+    "reason": "equivalent: id tie-break `a.id < b.id`; differs from `<=` only when a.id===b.id, which is unreachable because every finding id is made unique via the `used` Set (lines 35,50-51)"
+  }
+]
