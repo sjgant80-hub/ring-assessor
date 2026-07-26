@@ -24,15 +24,23 @@ const DEFAULTS = { threshold: 0.3 }; // severities below this are "quiet", not s
 
 // findings: [{ id, layer:Number>=0, severity:0..1, note? }]
 export function assess(findings = [], opts = {}) {
+  const o = opts || {};   // tolerate an explicit null opts, don't crash on o.threshold
   // A non-finite threshold would make every `severity >= threshold` false and silently report a
   // severe system as healthy — the opposite of what a triage tool must do. Fall back to the default.
-  const threshold = Number.isFinite(opts.threshold) ? opts.threshold : DEFAULTS.threshold;
+  const threshold = Number.isFinite(o.threshold) ? o.threshold : DEFAULTS.threshold;
 
-  // Assign a stable, UNIQUE id to every finding (append the index) so nothing collides in the
-  // distance/ranked maps — id-less findings at the same layer used to share the manufactured id `L<n>`.
+  // Assign a stable, UNIQUE id to every finding so nothing collides in the distance/ranked maps —
+  // both id-less findings (which used to share `L<layer>`) AND duplicate EXPLICIT ids are disambiguated
+  // by appending the index when an id would otherwise repeat.
+  const used = new Set();
   const clean = (Array.isArray(findings) ? findings : [])
     .filter(f => f && Number.isFinite(f.layer) && f.layer >= 0 && Number.isFinite(f.severity))
-    .map((f, i) => ({ id: f.id != null ? String(f.id) : `L${f.layer}#${i}`, layer: f.layer, severity: clamp01(f.severity), note: f.note || null }));
+    .map((f, i) => {
+      let id = f.id != null ? String(f.id) : `L${f.layer}`;
+      if (used.has(id)) id = `${id}#${i}`;
+      used.add(id);
+      return { id, layer: f.layer, severity: clamp01(f.severity), note: f.note || null };
+    });
 
   const active = clean.filter(f => f.severity >= threshold);
   if (active.length === 0) {

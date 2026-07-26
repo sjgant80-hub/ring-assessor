@@ -103,6 +103,18 @@ test('id-less findings at the same layer do not collide in the distance map', ()
   assert.equal(Object.keys(r.distanceFromRoot).length, 3);
 });
 
+test('duplicate EXPLICIT ids are disambiguated — the root distance is not overwritten', () => {
+  const r = assess([{ id: 'x', layer: 0, severity: 0.9 }, { id: 'x', layer: 4, severity: 0.8 }]);
+  assert.equal(Object.keys(r.distanceFromRoot).length, 2, 'both findings keep a distinct distance entry');
+  assert.equal(r.distanceFromRoot[r.root.id], 0, 'the root distance is intact, not clobbered');
+});
+
+test('an explicit null opts falls back to defaults instead of crashing', () => {
+  const r = assess([{ id: 'a', layer: 0, severity: 0.9 }], null);
+  assert.equal(r.healthy, false);
+  assert.equal(r.root.id, 'a');
+});
+
 test('deterministic — same findings, same assessment', () => {
   const f = [{ id: 'a', layer: 0, severity: 0.7 }, { id: 'b', layer: 2, severity: 0.5 }];
   assert.deepEqual(assess(f), assess(f));
